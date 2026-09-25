@@ -64,6 +64,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # 排队执行时要拿最新的仓库，而不是触发那一刻的版本
+          ref: master
           fetch-depth: 0
           persist-credentials: true
 
@@ -294,7 +296,9 @@ jobs:
           git config --local user.name 'GitHub Action'
           git add .
           git commit -m 'update new runs' || echo 'nothing to commit'
-          git push || echo 'nothing to push'
+          # 处理期间 App 可能又传了新的 GPX（只改 GPX_OUT，不会冲突），先合并再推送；新文件会再触发一次同步
+          git pull --rebase origin master
+          git push
 
       - name: Set Output
         id: set_output
