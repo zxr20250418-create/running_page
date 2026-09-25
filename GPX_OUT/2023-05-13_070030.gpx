@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RunSync" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><time>2023-05-12T23:00:30Z</time></metadata>
+  <trk>
+    <name>跑步</name>
+    <type>running</type>
+    <trkseg>
+
+    </trkseg>
+  </trk>
+  <extensions>
+    <distance>3056.97</distance>
+    <moving_time>1608.00</moving_time>
+    <elapsed_time>1608.00</elapsed_time>
+    <average_speed>1.90</average_speed>
+    <start_time>2023-05-12T23:00:30Z</start_time>
+    <end_time>2023-05-12T23:27:18Z</end_time>
+  </extensions>
+</gpx>
