@@ -107,26 +107,18 @@ def update_or_create_activity(session, run_activity):
             location_country = getattr(run_activity, "location_country", "")
             # or China for #176 to fix
             if not location_country and start_point or location_country == "China":
+                # 只查到城市一级（zoom=6），不公开街道、小区；查询慢就跳过，不重试
                 try:
                     location_country = str(
                         g.reverse(
                             f"{start_point.lat}, {start_point.lon}",
                             language="zh-CN",  # type: ignore
-                            timeout=15,
+                            zoom=6,
+                            timeout=5,
                         )
                     )
-                # limit (only for the first time)
-                except Exception:  # noqa: BLE001
-                    try:
-                        location_country = str(
-                            g.reverse(
-                                f"{start_point.lat}, {start_point.lon}",
-                                language="zh-CN",  # type: ignore
-                                timeout=15,
-                            )
-                        )
-                    except Exception:  # noqa: S110, BLE001
-                        pass
+                except Exception:  # noqa: S110, BLE001
+                    pass
 
             activity = Activity(
                 run_id=run_activity.id,
