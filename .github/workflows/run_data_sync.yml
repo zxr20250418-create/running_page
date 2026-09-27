@@ -24,6 +24,7 @@ on:
       - run_page/intervals_icu_sync.py
       - requirements.txt
       - GPX_OUT/**
+      - src/static/weight.json
 
 # App 连续上传时排队执行，避免两次同步同时推送互相冲突
 concurrency:

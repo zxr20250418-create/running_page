@@ -32,6 +32,11 @@ const TracksPage = lazy(() =>
     default: module.TracksPage,
   }))
 );
+const WeightCard = lazy(() =>
+  import('@/components/WeightCard').then((module) => ({
+    default: module.WeightCard,
+  }))
+);
 const SummaryPage = lazy(() =>
   import('@/components/SummaryPage').then((module) => ({
     default: module.SummaryPage,
@@ -221,6 +226,9 @@ function Dashboard() {
                   activities={activities}
                   onSelectActivity={selectActivity}
                 />
+                <Suspense fallback={null}>
+                  <WeightCard />
+                </Suspense>
                 <CalendarWidget
                   key={year ?? 'all'}
                   selectedActivity={selectedActivity}
