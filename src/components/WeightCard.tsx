@@ -26,6 +26,13 @@ type RangeKey = (typeof RANGES)[number]['key'];
 
 const DAY = 86400000;
 
+// Entries within `days` of the latest one (entries sorted ascending).
+const inRange = (entries: WeightEntry[], days: number) => {
+  if (!entries.length || days === Infinity) return entries;
+  const last = Date.parse(entries[entries.length - 1].date);
+  return entries.filter((e) => last - Date.parse(e.date) < days * DAY);
+};
+
 export function WeightCard() {
   const { locale } = useLocale();
   const zh = locale === 'zh';
@@ -36,25 +43,33 @@ export function WeightCard() {
     const controller = new AbortController();
     fetch(weightUrl, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : []))
-      .then((data: WeightEntry[]) =>
-        setEntries([...data].sort((a, b) => a.date.localeCompare(b.date)))
-      )
+      .then((data: WeightEntry[]) => {
+        const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+        setEntries(sorted);
+        // Sparse history: start on the shortest range that still draws a line
+        setRange(
+          RANGES.find((r) => inRange(sorted, r.days).length >= 2)?.key ?? 'all'
+        );
+      })
       .catch(() => {});
     return () => controller.abort();
   }, []);
 
-  const shown = useMemo(() => {
-    const days = RANGES.find((r) => r.key === range)!.days;
-    if (!entries.length || days === Infinity) return entries;
-    const last = Date.parse(entries[entries.length - 1].date);
-    return entries.filter((e) => last - Date.parse(e.date) < days * DAY);
-  }, [entries, range]);
+  const shown = useMemo(
+    () => inRange(entries, RANGES.find((r) => r.key === range)!.days),
+    [entries, range]
+  );
 
   if (!entries.length) return null;
 
   const latest = entries[entries.length - 1];
   const change = shown.length > 1 ? latest.kg - shown[0].kg : 0;
   const kgs = shown.map((e) => e.kg);
+  // Time axis so gaps between weigh-ins keep their real length
+  const points = shown.map((e) => ({ ...e, t: Date.parse(e.date) }));
+  const multiYear =
+    points.length > 1 && points[points.length - 1].t - points[0].t > 330 * DAY;
+  const isoDate = (t: number) => new Date(t).toISOString().slice(0, 10);
   const pad = 0.5;
   const domain = [
     Math.floor(Math.min(...kgs) - pad),
@@ -123,7 +138,7 @@ export function WeightCard() {
       <div className="mt-2 h-40">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
-            data={shown}
+            data={points}
             margin={{ top: 8, right: 4, bottom: 0, left: -24 }}
           >
             <CartesianGrid
@@ -132,9 +147,14 @@ export function WeightCard() {
               strokeDasharray="3 3"
             />
             <XAxis
-              dataKey="date"
+              dataKey="t"
+              type="number"
+              scale="time"
+              domain={['dataMin', 'dataMax']}
               tick={{ fill: 'var(--color-muted)', fontSize: 11 }}
-              tickFormatter={(d: string) => d.slice(5)}
+              tickFormatter={(t: number) =>
+                multiYear ? isoDate(t).slice(0, 7) : isoDate(t).slice(5)
+              }
               axisLine={false}
               tickLine={false}
               minTickGap={24}
@@ -152,13 +172,14 @@ export function WeightCard() {
                 borderRadius: 8,
                 color: 'var(--color-text)',
               }}
+              labelFormatter={(t) => isoDate(Number(t))}
               formatter={(v) => [
                 `${Number(v).toFixed(1)} kg`,
                 zh ? '体重' : 'Weight',
               ]}
             />
             <Line
-              type="monotone"
+              type="linear"
               dataKey="kg"
               stroke="var(--color-accent)"
               strokeWidth={2}
