@@ -1,13 +1,15 @@
 import datetime
 import os
 import sys
+from pathlib import Path
 
 import arrow
 import stravalib
+from gpx_dedup import apply_plan, atomic_json, build_plan
 from gpxtrackposter import track_loader
 from polyline_processor import filter_out
 from sqlalchemy import func
-from synced_data_file_logger import save_synced_data_file_list
+from synced_data_file_logger import load_synced_file_list, save_synced_data_file_list
 
 from .db import Activity, init_db, update_or_create_activity
 
@@ -83,31 +85,63 @@ class Generator:
         self.session.commit()
 
     def sync_from_data_dir(self, data_dir, file_suffix="gpx", activity_title_dict=None):
+        # Audit all source files, including those already listed in imported.json.
+        # This also repairs existing rows on a sync with no newly uploaded files.
+        plan = build_plan(data_dir) if file_suffix == "gpx" else None
+        already_synced = None
+        if plan is not None:
+            imported = set(load_synced_file_list())
+            existing_ids = set(self.get_old_tracks_ids())
+            already_synced = {
+                name
+                for name, record in plan.records.items()
+                if name in imported and str(record.run_id) in existing_ids
+            }
         loader = track_loader.TrackLoader()
         tracks = loader.load_tracks(
-            data_dir, file_suffix=file_suffix, activity_title_dict=activity_title_dict
+            data_dir,
+            file_suffix=file_suffix,
+            activity_title_dict=activity_title_dict,
+            synced_files=already_synced,
         )
         print(f"load {len(tracks)} tracks")
         if not tracks:
             print("No tracks found.")
-            return
 
         synced_files = []
-
-        for t in tracks:
-            created = update_or_create_activity(
-                self.session, t.to_namedtuple(run_from=file_suffix)
-            )
-            if created:
-                sys.stdout.write("+")
-            else:
-                sys.stdout.write(".")
-            synced_files.extend(t.file_names)
-            sys.stdout.flush()
-
-        save_synced_data_file_list(synced_files)
-
-        self.session.commit()
+        try:
+            for t in sorted(tracks, key=lambda t: t.file_names):
+                name = t.file_names[0]
+                canonical = plan.aliases.get(name) if plan is not None else None
+                # Re-exported copies with the same timestamp ID must not overwrite
+                # the canonical source's measurements just because of load order.
+                same_id_alias = (
+                    canonical is not None
+                    and plan.records[name].run_id == plan.records[canonical].run_id
+                )
+                if not same_id_alias:
+                    created = update_or_create_activity(
+                        self.session, t.to_namedtuple(run_from=file_suffix)
+                    )
+                    sys.stdout.write("+" if created else ".")
+                synced_files.extend(t.file_names)
+                sys.stdout.flush()
+            self.session.flush()
+            if any(self.session.get(Activity, t.run_id) is None for t in tracks):
+                raise ValueError(
+                    "A track failed to import; imported.json was not updated"
+                )
+            if plan is not None:
+                apply_plan(self.session, plan)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        # Only record success after the database transaction has committed.
+        if synced_files:
+            save_synced_data_file_list(synced_files)
+        if plan is not None:
+            atomic_json(Path(data_dir).parent / "gpx_dedup_report.json", plan.report)
 
     def sync_from_app(self, app_tracks):
         if not app_tracks:
@@ -129,7 +163,9 @@ class Generator:
 
     def load(self):
         # if sub_type is not in the db, just add an empty string to it
-        query = self.session.query(Activity).filter(Activity.distance > 0.1)
+        query = self.session.query(Activity).filter(
+            Activity.distance > 0.1, Activity.duplicate_of.is_(None)
+        )
         if self.only_run:
             query = query.filter(Activity.type == "Run")
 

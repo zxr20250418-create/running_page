@@ -1,11 +1,15 @@
 import duckdb
+from config import SQL_FILE
+from generator.db import init_db
 
+init_db(SQL_FILE).close()
 with duckdb.connect() as conn:
     conn.install_extension("sqlite")
     conn.load_extension("sqlite")
     conn.sql("ATTACH 'run_page/data.db' (TYPE SQLITE);USE data;")
     conn.sql(
-        "COPY (SELECT * FROM activities) TO 'run_page/data.parquet' (FORMAT PARQUET);"
+        "COPY (SELECT * EXCLUDE (duplicate_of) FROM activities WHERE duplicate_of IS NULL) "
+        "TO 'run_page/data.parquet' (FORMAT PARQUET);"
     )
 
 """
