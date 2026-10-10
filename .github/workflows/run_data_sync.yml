@@ -16,6 +16,11 @@ on:
       - run_page/coros_sync.py
       - run_page/keep_sync.py
       - run_page/gpx_sync.py
+      - run_page/gpx_dedup.py
+      - run_page/generator/**
+      - run_page/gpxtrackposter/**
+      - run_page/synced_data_file_logger.py
+      - gpx_dedup_overrides.json
       - run_page/tcx_sync.py
       - run_page/tcx_to_garmin_sync.py
       - run_page/garmin_to_strava_sync.py

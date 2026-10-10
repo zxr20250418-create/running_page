@@ -2,15 +2,15 @@ import json
 import os
 
 from config import SYNCED_FILE
+from gpx_dedup import atomic_json
 
 
 def save_synced_data_file_list(file_list: list):
     old_list = load_synced_file_list()
 
-    with open(SYNCED_FILE, "w") as f:
-        file_list.extend(old_list)
-
-        json.dump(file_list, f)
+    # Preserve source filenames, including excluded duplicates; do not mutate
+    # the caller's list or accumulate repeated entries on retries.
+    atomic_json(SYNCED_FILE, list(dict.fromkeys([*file_list, *old_list])))
 
 
 def load_synced_file_list():

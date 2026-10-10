@@ -74,9 +74,11 @@ class TrackLoader:
             "fit": load_fit_file,
         }
 
-    def load_tracks(self, data_dir, file_suffix="gpx", activity_title_dict=None):
+    def load_tracks(
+        self, data_dir, file_suffix="gpx", activity_title_dict=None, synced_files=None
+    ):
         """Load tracks data_dir and return as a List of tracks"""
-        file_names = [x for x in self._list_data_files(data_dir, file_suffix)]
+        file_names = list(self._list_data_files(data_dir, file_suffix, synced_files))
         print(f"{file_suffix.upper()} files: {len(file_names)}")
 
         tracks = []
@@ -96,19 +98,20 @@ class TrackLoader:
 
     def load_tracks_from_db(self, sql_file, is_grid=False):
         session = init_db(sql_file)
+        query = session.query(Activity).filter(Activity.duplicate_of.is_(None))
         if is_grid:
-            activities = (
-                session.query(Activity)
-                .filter(Activity.summary_polyline != "")
-                .order_by(Activity.start_date_local)
+            activities = query.filter(Activity.summary_polyline != "").order_by(
+                Activity.start_date_local
             )
         else:
-            activities = session.query(Activity).order_by(Activity.start_date_local)
+            activities = query.order_by(Activity.start_date_local)
         tracks = []
         for activity in activities:
             t = Track()
             t.load_from_db(activity)
             tracks.append(t)
+        session.close()
+        session.bind.dispose()
         print(f"All tracks: {len(tracks)}")
         tracks = self._filter_tracks(tracks)
         print(f"After filter tracks: {len(tracks)}")
@@ -155,8 +158,9 @@ class TrackLoader:
         return tracks
 
     @staticmethod
-    def _list_data_files(data_dir, file_suffix):
-        synced_files = load_synced_file_list()
+    def _list_data_files(data_dir, file_suffix, synced_files=None):
+        if synced_files is None:
+            synced_files = set(load_synced_file_list())
         data_dir = os.path.abspath(data_dir)
         if not os.path.isdir(data_dir):
             raise ParameterError(f"Not a directory: {data_dir}")
