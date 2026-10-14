@@ -1,13 +1,17 @@
 import sqlite3
 
+from config import SQL_FILE
+from generator.db import init_db
+
 try:
     import pandas as pd
 except Exception:  # noqa: BLE001
     raise Exception("please install pandas run: pip3 install pandas")  # noqa: TRY002
 from math import floor
 
-data = sqlite3.connect("run_page/data.db")
-df = pd.read_sql_query("SELECT * FROM activities", data)
+init_db(SQL_FILE).close()
+data = sqlite3.connect(SQL_FILE)
+df = pd.read_sql_query("SELECT * FROM activities WHERE duplicate_of IS NULL", data)
 
 
 def apply_duration_time(d):
@@ -19,7 +23,7 @@ def apply_duration_time(d):
 
 
 # we do not need polyline in csv
-df = df.drop("summary_polyline", axis=1)
+df = df.drop(["summary_polyline", "duplicate_of"], axis=1)
 df["elapsed_time"] = df["elapsed_time"].apply(apply_duration_time)
 df["moving_time"] = df["moving_time"].apply(apply_duration_time)
 
