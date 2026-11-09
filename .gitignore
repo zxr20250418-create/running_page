@@ -26,3 +26,6 @@ route.png
 route.svg
 
 .env
+
+# Local audit evidence can include personal activity metadata.
+/gpx_dedup_report.json

@@ -64,6 +64,8 @@ class Activity(Base):
     average_heartrate = Column(Float)
     average_speed = Column(Float)
     elevation_gain = Column(Float)
+    # Reversible GPX statistics exclusion. The original row is always retained.
+    duplicate_of = Column(Integer, nullable=True)
     streak = None
 
     def to_dict(self):
@@ -170,7 +172,7 @@ def add_missing_columns(engine, model):
         if column.name not in columns:
             missing_columns.append(column)
     if missing_columns:
-        with engine.connect() as conn:
+        with engine.begin() as conn:
             for column in missing_columns:
                 column_type = str(column.type)
                 conn.execute(
