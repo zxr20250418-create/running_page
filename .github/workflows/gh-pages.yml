@@ -34,13 +34,14 @@ jobs:
   build_and_deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
       id-token: write
+      actions: read
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -105,8 +106,30 @@ jobs:
           # Upload dist repository
           name: pages-artifact
           path: './dist'
+      # 刚上传的 artifact 有时要过几秒才能被查到，直接部署会报
+      # "No artifacts named pages-artifact were found"，所以先等它出现
+      - name: Wait for artifact to become visible
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 12); do
+            n=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?name=pages-artifact" -q '.total_count' || echo 0)
+            if [ "${n:-0}" -ge 1 ]; then echo "artifact visible after $((i-1))x5s"; exit 0; fi
+            sleep 5
+          done
+          echo "artifact still not visible after 60s, trying deploy anyway"
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: pages-artifact
+      - name: Wait before retrying deploy
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 20
+      - name: Deploy to GitHub Pages (retry)
+        id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4
         with:
           artifact_name: pages-artifact
